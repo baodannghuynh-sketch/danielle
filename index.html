@@ -1,13 +1,112 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>danielle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- Favicon & SEO -->
+    <title>DANIELLE • JEWELRY</title>
+    <meta name="description" content="DANIELLE – Thương hiệu trang sức cao cấp thủ công Việt Nam. Vàng 18K, kim cương GIA, ngọc trai Nam Hải. Bộ sưu tập dành riêng cho quý ông & nữ thần hiện đại." />
+    <meta name="keywords" content="trang sức cao cấp, vàng 18K, kim cương GIA, trang sức thủ công, DANIELLE, luxury jewelry Việt Nam, nhẫn cưới, dây chuyền cuban, vòng tay titan" />
+    <meta name="author" content="DANIELLE Official" />
+    <meta name="theme-color" content="#A51C30" />
+
+    <!-- Open Graph / Facebook / Zalo -->
+    <meta property="og:title" content="DANIELLE • Luxury Handcrafted Jewelry" />
+    <meta property="og:description" content="Mỗi món trang sức là một tuyệt tác. Handcrafted in Vietnam with love." />
+    <meta property="og:image" content="https://danielle.vn/og-image.jpg" />
+    <meta property="og:url" content="https://danielle.vn" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="vi_VN" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DANIELLE • Luxury Jewelry Handcrafted in Vietnam" />
+    <meta name="twitter:description" content="Vàng 18K • Kim cương GIA • Thiết kế riêng cho quý ông & nữ thần" />
+    <meta name="twitter:image" content="https://danielle.vn/og-image.jpg" />
+
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/png" href="../src/images/logo.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Preload font để load nhanh hơn (tặng thêm) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@300;400;500;600;700&family=Oswald:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Preload critical assets -->
+    <link rel="preload" href="/src/images/logo.png" as="image" />
+    <link rel="preload" href="/hero-bg.jpg" as="image" />
+
+    <!-- PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Loading đẹp như phim -->
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        color: #fff;
+        font-family: 'Georgia', 'Playfair Display', serif;
+        overflow-x: hidden;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      .loading-screen {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(135deg, #0f0a0a 0%, #1a0f0f 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        z-index: 9999;
+        animation: fadeOut 1s ease forwards 3s;
+      }
+      .loading-screen h1 {
+        font-size: 140px;
+        font-weight: 300;
+        letter-spacing: 36px;
+        font-family: 'Playfair Display', serif;
+        background: linear-gradient(90deg, #A51C30, #fff, #A51C30);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: float 6s ease-in-out infinite;
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-30px); }
+      }
+      @keyframes fadeOut {
+        to { opacity: 0; pointer-events: none; }
+      }
+    </style>
   </head>
   <body>
+    <!-- Luxury Loading Screen – Hiện 3 giây đầu tiên -->
+    <div class="loading-screen" id="luxury-loading">
+      <h1>DANIELLE</h1>
+      <p style="margin-top: 60px; font-size: 20px; letter-spacing: 10px; opacity: 0.8;">
+        L U X U R Y   I S   E T E R N A L
+      </p>
+    </div>
+
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+
+    <script type="module" src="./src/main.jsx"></script>
+
+    <!-- Tự động ẩn loading sau 3.5s (dự phòng nếu JS chậm) -->
+    <script>
+      setTimeout(() => {
+        const loading = document.getElementById('luxury-loading');
+        if (loading) loading.style.display = 'none';
+      }, 3500);
+    </script>
   </body>
 </html>

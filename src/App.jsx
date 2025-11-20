@@ -1,5 +1,8 @@
 // src/App.jsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { supabase } from './supabaseclient'
+
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Home from './pages/Home'
@@ -12,14 +15,9 @@ import Profile from './pages/Profile'
 import Men from './pages/Men'
 import Women from './pages/Women'
 import Handcrafted from './pages/Handcrafted'
-
-// FILE ADMIN CỦA ANH ĐANG NẰM CHUNG TRONG /pages → IMPORT TRỰC TIẾP
 import AdminLayout from './pages/AdminLayout'
-import AdminProducts from './pages/AdminProducts'     // anh đặt tên gì thì sửa tên cho khớp
-import AdminOrders from './pages/AdminOrders'         // nếu chưa có thì đổi thành AdminDashboard cũng được
-
-import { useEffect, useState } from 'react'
-import { supabase } from './supabaseclient'
+import AdminProducts from './pages/AdminProducts'
+import AdminOrders from './pages/AdminOrders'
 
 function App() {
   const [user, setUser] = useState(null)
@@ -27,49 +25,84 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) checkAdminRole(session.user.id)
-      setLoading(false)
-    })
+    const load = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(session?.user || null)
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          await checkAdminRole(session.user.id)
+        }
+
+      } catch (err) {
+        console.error("Lỗi getSession:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load()
+
+    // --- FIX SUPABASE v2 ---
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) checkAdminRole(session.user.id)
       else setIsAdmin(false)
-      setLoading(false)
     })
 
-    return () => listener.subscription.unsubscribe()
+    // unsubscribe đúng
+    return () => {
+      data.subscription.unsubscribe()
+    }
+
   }, [])
 
   const checkAdminRole = async (uid) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', uid)
-      .single()
-
-    setIsAdmin(data?.role === 'admin')
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', uid)
+        .single()
+      setIsAdmin(data?.role === 'admin')
+    } catch (err) {
+      console.error("Lỗi checkAdminRole:", err)
+      setIsAdmin(false)
+    }
   }
 
-  // Bảo vệ route admin
-  const ProtectedAdmin = ({ children }) => {
-    if (loading) return <div style={{paddingTop: '200px', textAlign: 'center', color: '#A51C30'}}>Đang tải...</div>
-    if (!user) return <Navigate to="/login" replace />
-    if (!isAdmin) {
-      alert('Bạn không có quyền truy cập khu vực quản trị!')
-      return <Navigate to="/" replace />
-    }
-    return children
+  // Splash screen loading
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#000',
+        color: '#fff',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: '"Playfair Display", serif'
+      }}>
+        <h1 style={{
+          fontSize: '120px',
+          letterSpacing: '20px',
+          background: 'linear-gradient(90deg, #A51C30, #fff, #A51C30)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent'
+        }}>
+          DANIELLE
+        </h1>
+        <p style={{letterSpacing: '10px', marginTop: '40px'}}>L U X U R Y   I S   E T E R N A L</p>
+      </div>
+    )
   }
 
   return (
     <BrowserRouter>
-      <div style={{ minHeight: '100vh', background: '#fff', color: '#111', fontFamily: 'Georgia, serif' }}>
+      <div style={{minHeight: '100vh', background: '#000', color: '#fff'}}>
         <Navbar user={user} isAdmin={isAdmin} />
-
-        <main style={{ minHeight: '100vh' }}>
+        <main style={{minHeight: '100vh', paddingTop: '120px'}}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/shop" element={<Shop />} />
@@ -82,24 +115,16 @@ function App() {
             <Route path="/women" element={<Women />} />
             <Route path="/handcrafted" element={<Handcrafted />} />
 
-            {/* ADMIN ROUTES – KHÔNG CẦN THƯ MỤC CON */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedAdmin>
-                  <AdminLayout />
-                </ProtectedAdmin>
-              }
-            >
+            {/* Admin routes */}
+            <Route path="/admin" element={isAdmin ? <AdminLayout /> : <Navigate to="/" />}>
               <Route index element={<AdminProducts />} />
               <Route path="products" element={<AdminProducts />} />
               <Route path="orders" element={<AdminOrders />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
-
         <Footer />
       </div>
     </BrowserRouter>
