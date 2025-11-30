@@ -1,298 +1,256 @@
 // src/pages/Profile.jsx
-import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseclient';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { supabase } from "../supabaseclient";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 
 export default function Profile() {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({ full_name: '', phone: '', address: '' });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const navigate = useNavigate();
 
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState({
+    full_name: "",
+    phone: "",
+    address: "",
+    avatar_url: "",
+  });
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const DEFAULT_AVATAR =
+    "https://cdn-icons-png.flaticon.com/512/7662/7662057.png"; // Avatar kim cương sang trọng
+
+  // =============================
+  // 📌 Load User + Profile
+  // =============================
   useEffect(() => {
-    const loadProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return navigate('/login');
+    const load = async () => {
+      const { data } = await supabase.auth.getUser();
 
-      setUser(user);
+      if (!data.user) {
+        navigate("/login");
+        return;
+      }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('full_name, phone, address')
-        .eq('id', user.id)
+      setUser(data.user);
+
+      const { data: pf } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", data.user.id)
         .single();
 
-      if (error && error.code === 'PGRST116') {
-        // Tạo profile mặc định nếu chưa có
-        const defaultProfile = {
-          id: user.id,
-          full_name: user.user_metadata.full_name || user.email.split('@')[0],
-          phone: '',
-          address: '',
-          updated_at: new Date()
-        };
-        await supabase.from('profiles').insert(defaultProfile);
-        setProfile({ full_name: defaultProfile.full_name, phone: '', address: '' });
-      } else if (data) {
+      if (pf) {
         setProfile({
-          full_name: data.full_name || '',
-          phone: data.phone || '',
-          address: data.address || ''
+          full_name: pf.full_name || "",
+          phone: pf.phone || "",
+          address: pf.address || "",
+          avatar_url: pf.avatar_url || "",
         });
       }
 
       setLoading(false);
     };
 
-    loadProfile();
-  }, [navigate]);
+    load();
+  }, []);
 
-  const handleSave = async () => {
-    if (saving) return;
+  // =============================
+  // 📌 Handle save
+  // =============================
+  const handleSave = async (e) => {
+    e.preventDefault();
     setSaving(true);
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: profile.full_name.trim() || user.email.split('@')[0],
-        phone: profile.phone.trim(),
-        address: profile.address.trim() || null,
-        updated_at: new Date()
-      })
-      .eq('id', user.id);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: profile.full_name,
+          phone: profile.phone,
+          address: profile.address,
+          avatar_url: profile.avatar_url,
+        })
+        .eq("id", user.id);
 
-    setSaving(false);
+      if (error) throw error;
+
+      toast.success("Đã lưu hồ sơ!");
+
+      // 🔥 Cập nhật navbar ngay lập tức
+      const event = new CustomEvent("profileUpdated");
+      window.dispatchEvent(event);
+
+      // 🔥 Quay về trang trước
+      setTimeout(() => navigate(-1), 400);
+    } catch (err) {
+      console.error(err);
+      toast.error("Lỗi lưu hồ sơ!");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // =============================
+  // 📌 Upload ảnh avatar
+  // =============================
+  const uploadAvatar = async (file) => {
+    if (!file) return;
+
+    const fileName = `avatar_${user.id}_${Date.now()}`;
+
+    let { data, error } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file);
 
     if (error) {
-      alert('Lỗi khi lưu: ' + error.message);
+      toast.error("Upload ảnh lỗi!");
       return;
     }
 
-    setSaved(true);
-    setTimeout(() => setSaved(false), 4000);
+    const { data: urlData } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(fileName);
+
+    setProfile({ ...profile, avatar_url: urlData.publicUrl });
+
+    toast.success("Đổi avatar thành công!");
   };
 
-  if (loading) {
+  if (loading)
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0f0a0a 0%, #1a0f0f 100%)',
-        color: '#fff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '28px',
-        letterSpacing: '3px'
-      }}>
-        Đang tải hồ sơ VIP...
+      <div style={{ textAlign: "center", padding: "200px", color: "#fff" }}>
+        Đang tải...
       </div>
     );
-  }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0f0a0a 0%, #1a0f0f 100%)',
-      padding: '140px 20px 200px',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      {/* Background decoration */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'radial-gradient(circle at 20% 80%, rgba(165,28,48,0.15) 0%, transparent 50%)',
-        pointerEvents: 'none'
-      }} />
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'radial-gradient(circle at 80% 20%, rgba(165,28,48,0.1) 0%, transparent 50%)',
-        pointerEvents: 'none'
-      }} />
+    <div
+      style={{
+        minHeight: "100vh",
+        background: `linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.9)), url("${profile.avatar_url ||
+          DEFAULT_AVATAR}") center/cover`,
+        padding: "160px 20px 80px",
+        display: "flex",
+        justifyContent: "center",
+        color: "white",
+      }}
+    >
+      <form
+        onSubmit={handleSave}
+        style={{
+          width: "520px",
+          background: "rgba(255,255,255,0.06)",
+          padding: "40px",
+          borderRadius: "22px",
+          border: "1px solid rgba(255,255,255,0.12)",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+          backdropFilter: "blur(4px)",
+        }}
+      >
+        {/* AVATAR */}
+        <div style={{ textAlign: "center", marginBottom: "30px" }}>
+          <label style={{ cursor: "pointer" }}>
+            <img
+              src={profile.avatar_url || DEFAULT_AVATAR}
+              alt="avatar"
+              style={{
+                width: "140px",
+                height: "140px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "4px solid rgba(255,255,255,0.6)",
+                boxShadow: "0 0 20px rgba(255,255,255,0.4)",
+              }}
+            />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => uploadAvatar(e.target.files[0])}
+              style={{ display: "none" }}
+            />
+          </label>
 
-      <div style={{
-        maxWidth: '680px',
-        margin: '0 auto',
-        position: 'relative',
-        zIndex: 10
-      }}>
-        {/* VIP Card */}
-        <div style={{
-          background: 'rgba(255,255,255,0.05)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '40px',
-          padding: '80px 70px',
-          boxShadow: '0 50px 120px rgba(0,0,0,0.6), 0 0 100px rgba(165,28,48,0.2)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          {/* Logo + Title */}
-          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
-            <h1 style={{
-              fontSize: '88px',
-              fontWeight: '300',
-              letterSpacing: '20px',
-              margin: '0 0 20px',
+          <h2
+            style={{
               fontFamily: '"Playfair Display", serif',
-              background: 'linear-gradient(90deg, #A51C30, #fff, #A51C30)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              textShadow: '0 10px 30px rgba(0,0,0,0.5)'
-            }}>
-              DANIELLE
-            </h1>
-            <p style={{
-              fontSize: '24px',
-              letterSpacing: '8px',
-              color: '#A51C30',
-              margin: 0,
-              fontWeight: '500'
-            }}>
-              THÀNH VIÊN VIP
-            </p>
-          </div>
-
-          {/* Member Info */}
-          <div style={{
-            background: 'rgba(165,28,48,0.1)',
-            borderRadius: '24px',
-            padding: '30px',
-            marginBottom: '50px',
-            textAlign: 'center',
-            border: '1px solid rgba(165,28,48,0.3)'
-          }}>
-            <p style={{ color: '#aaa', fontSize: '16px', letterSpacing: '3px', margin: '0 0 8px' }}>
-              THÀNH VIÊN KÍNH CHÀO
-            </p>
-            <p style={{
-              fontSize: '28px',
-              color: '#fff',
-              fontWeight: '500',
-              margin: 0,
-              letterSpacing: '2px'
-            }}>
-              {profile.full_name || user?.email.split('@')[0]}
-            </p>
-            <p style={{ color: '#A51C30', fontSize: '18px', margin: '8px 0 0' }}>
-              {user?.email}
-            </p>
-          </div>
-
-          {/* Form chỉnh sửa */}
-          <div style={{ space: '30px 0' }}>
-            <input
-              placeholder="Họ & tên"
-              value={profile.full_name}
-              onChange={e => setProfile({ ...profile, full_name: e.target.value })}
-              style={inputStyle}
-            />
-            <input
-              placeholder="Số điện thoại"
-              value={profile.phone}
-              onChange={e => setProfile({ ...profile, phone: e.target.value })}
-              style={inputStyle}
-            />
-            <textarea
-              placeholder="Địa chỉ giao hàng mặc định (sẽ dùng cho mọi đơn hàng)"
-              value={profile.address}
-              onChange={e => setProfile({ ...profile, address: e.target.value })}
-              rows="4"
-              style={{ ...inputStyle, height: '140px', resize: 'none' }}
-            />
-          </div>
-
-          {/* Buttons */}
-          <div style={{ display: 'flex', gap: '20px', marginTop: '50px' }}>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                flex: 1,
-                padding: '24px',
-                background: saving ? '#777' : '#A51C30',
-                color: 'white',
-                border: 'none',
-                borderRadius: '50px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                letterSpacing: '4px',
-                cursor: saving ? 'not-allowed' : 'pointer',
-                boxShadow: '0 20px 50px rgba(165,28,48,0.4)',
-                transition: 'all 0.5s ease'
-              }}
-              onMouseEnter={e => !saving && (e.target.style.background = '#c51c35')}
-              onMouseLeave={e => !saving && (e.target.style.background = '#A51C30')}
-            >
-              {saving ? 'ĐANG LƯU...' : 'LƯU THAY ĐỔI'}
-            </button>
-
-            <button
-              onClick={() => navigate(-1)}
-              style={{
-                flex: 1,
-                padding: '24px',
-                background: 'transparent',
-                color: '#A51C30',
-                border: '2px solid #A51C30',
-                borderRadius: '50px',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                letterSpacing: '4px',
-                cursor: 'pointer',
-                transition: 'all 0.4s ease'
-              }}
-              onMouseEnter={e => e.target.style.background = 'rgba(165,28,48,0.1)'}
-              onMouseLeave={e => e.target.style.background = 'transparent'}
-            >
-              QUAY LẠI
-            </button>
-          </div>
-
-          {/* Success message */}
-          {saved && (
-            <div style={{
-              marginTop: '40px',
-              padding: '24px',
-              background: 'rgba(76,175,80,0.15)',
-              border: '2px solid #66BB6A',
-              borderRadius: '20px',
-              color: '#66BB6A',
-              textAlign: 'center',
-              fontSize: '18px',
-              fontWeight: 'bold'
-            }}>
-              Cập nhật thông tin thành công! Bạn thật sự là thành viên VIP của DANIELLE
-            </div>
-          )}
-
-          {/* Decorative line */}
-          <div style={{
-            marginTop: '60px',
-            height: '2px',
-            background: 'linear-gradient(90deg, transparent, #A51C30, transparent)',
-            boxShadow: '0 0 30px #A51C30'
-          }} />
+              marginTop: "20px",
+              fontSize: "36px",
+              letterSpacing: "4px",
+            }}
+          >
+            {profile.full_name || "Chưa có tên"}
+          </h2>
         </div>
-      </div>
+
+        {/* INPUT */}
+        <label style={labelStyle}>Họ và tên</label>
+        <input
+          value={profile.full_name}
+          onChange={(e) =>
+            setProfile({ ...profile, full_name: e.target.value })
+          }
+          style={inputStyle}
+        />
+
+        <label style={labelStyle}>Số điện thoại</label>
+        <input
+          value={profile.phone}
+          onChange={(e) =>
+            setProfile({ ...profile, phone: e.target.value })
+          }
+          style={inputStyle}
+        />
+
+        <label style={labelStyle}>Địa chỉ</label>
+        <input
+          value={profile.address}
+          onChange={(e) =>
+            setProfile({ ...profile, address: e.target.value })
+          }
+          style={inputStyle}
+        />
+
+        {/* SAVE BUTTON */}
+        <button
+          type="submit"
+          disabled={saving}
+          style={{
+            marginTop: "20px",
+            width: "100%",
+            padding: "16px",
+            borderRadius: "50px",
+            border: "none",
+            background: "linear-gradient(90deg, #A51C30, #c51c35)",
+            color: "white",
+            fontSize: "20px",
+            fontWeight: "bold",
+            letterSpacing: "3px",
+            cursor: "pointer",
+          }}
+        >
+          {saving ? "Đang lưu..." : "LƯU THAY ĐỔI"}
+        </button>
+      </form>
     </div>
   );
 }
 
+// Style
+const labelStyle = {
+  marginTop: "14px",
+  fontSize: "15px",
+  opacity: 0.9,
+};
+
 const inputStyle = {
-  width: '100%',
-  padding: '22px 24px',
-  marginBottom: '24px',
-  background: 'rgba(255,255,255,0.08)',
-  border: '2px solid rgba(255,255,255,0.15)',
-  borderRadius: '20px',
-  color: 'white',
-  fontSize: '18px',
-  outline: 'none',
-  transition: 'all 0.4s ease',
-  '::placeholder': { color: '#888' }
+  width: "100%",
+  padding: "14px",
+  marginTop: "6px",
+  borderRadius: "12px",
+  border: "1px solid rgba(255,255,255,0.3)",
+  background: "rgba(255,255,255,0.15)",
+  color: "white",
+  fontSize: "16px",
 };

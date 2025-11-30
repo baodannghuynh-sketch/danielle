@@ -257,3 +257,4 @@ export default function Handcrafted() {
     </div>
   );
 }
+// src/pages/Handcrafted.jsx

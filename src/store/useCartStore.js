@@ -1,74 +1,109 @@
 // src/store/useCartStore.js
-import { create } from 'zustand';
+import { create } from "zustand";
 
-// Đảm bảo hook này được EXPORT để các Component khác có thể import
 export const useCartStore = create((set, get) => ({
-  items: [],
+  // ---------------- UI ----------------
   isOpen: false,
-
-  initCart: () => {
-    const saved = localStorage.getItem('cart');
-    if (saved) {
-      try {
-        set({ items: JSON.parse(saved) });
-      } catch {
-        localStorage.removeItem('cart');
-      }
-    }
-  },
-
-  toggle: () => set((state) => ({ isOpen: !state.isOpen })),
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false }),
 
-  addItem: (product) =>
-    set((state) => {
-      const existing = state.items.find((i) => i.id === product.id);
-      let newItems;
-      if (existing) {
-        newItems = state.items.map((i) =>
-          i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      } else {
-        newItems = [...state.items, { ...product, quantity: 1 }];
-      }
-      localStorage.setItem('cart', JSON.stringify(newItems));
-      return { items: newItems };
-    }),
+  // ---------------- DATA ----------------
+  items: [],
+  wishlist: [],
+  recentViewed: [],
 
-  updateQuantity: (id, quantity) =>
-    set((state) => {
-      let newItems;
-      if (quantity <= 0) {
-        newItems = state.items.filter((i) => i.id !== id);
-      } else {
-        newItems = state.items.map((i) =>
-          i.id === id ? { ...i, quantity } : i
-        );
-      }
-      localStorage.setItem('cart', JSON.stringify(newItems));
-      return { items: newItems };
-    }),
+  // Load từ localStorage
+  initCart: () => {
+    const cart = localStorage.getItem("cart");
+    const wishlist = localStorage.getItem("wishlist");
+    const recent = localStorage.getItem("recent");
 
-  removeItem: (id) =>
-    set((state) => {
-      const newItems = state.items.filter((i) => i.id !== id);
-      localStorage.setItem('cart', JSON.stringify(newItems));
-      return { items: newItems };
-    }),
-
-  clear: () => {
-    localStorage.removeItem('cart');
-    set({ items: [], isOpen: false });
+    if (cart) set({ items: JSON.parse(cart) });
+    if (wishlist) set({ wishlist: JSON.parse(wishlist) });
+    if (recent) set({ recentViewed: JSON.parse(recent) });
   },
 
-  getTotal: () => {
-    const { items } = get();
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // Lưu vào localStorage
+  persist: () => {
+    const state = get();
+    localStorage.setItem("cart", JSON.stringify(state.items));
+    localStorage.setItem("wishlist", JSON.stringify(state.wishlist));
+    localStorage.setItem("recent", JSON.stringify(state.recentViewed));
   },
 
-  getCount: () => {
-    const { items } = get();
-    return items.reduce((sum, item) => sum + item.quantity, 0);
+  // ---------------- CART ----------------
+  addItem: (product) => {
+    let items = [...get().items];
+    const idx = items.findIndex((i) => i.id === product.id);
+
+    if (idx >= 0) {
+      items[idx].quantity += 1;
+    } else {
+      items.push({ ...product, quantity: 1 });
+    }
+
+    set({ items });
+    get().persist();
+  },
+
+  increaseQuantity: (id) => {
+    const items = get().items.map((i) =>
+      i.id === id ? { ...i, quantity: i.quantity + 1 } : i
+    );
+    set({ items });
+    get().persist();
+  },
+
+  decreaseQuantity: (id) => {
+    let items = get().items.map((i) =>
+      i.id === id ? { ...i, quantity: i.quantity - 1 } : i
+    );
+    items = items.filter((i) => i.quantity > 0);
+
+    set({ items });
+    get().persist();
+  },
+
+  removeItem: (id) => {
+    set({ items: get().items.filter((i) => i.id !== id) });
+    get().persist();
+  },
+
+  getCount: () =>
+    get().items.reduce((sum, i) => sum + i.quantity, 0),
+
+  totalPrice: () =>
+    get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+
+  // ---------------- WISHLIST ----------------
+  toggleWishlist: (p) => {
+    let w = [...get().wishlist];
+    const exists = w.find((i) => i.id === p.id);
+
+    if (exists) {
+      w = w.filter((i) => i.id !== p.id);
+    } else {
+      w.push(p);
+    }
+
+    set({ wishlist: w });
+    get().persist();
+  },
+
+  // ---------------- RECENT VIEWED ----------------
+  addRecentViewed: (p) => {
+    let r = [...get().recentViewed];
+
+    // xóa nếu đã tồn tại
+    r = r.filter((i) => i.id !== p.id);
+
+    // thêm vào đầu danh sách
+    r.unshift(p);
+
+    // chỉ giữ 10 sản phẩm gần nhất
+    if (r.length > 10) r.pop();
+
+    set({ recentViewed: r });
+    get().persist();
   },
 }));

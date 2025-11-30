@@ -1,392 +1,609 @@
-// src/pages/admin/Products.jsx
-import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseclient';
+// src/pages/AdminProducts.jsx
+import { useEffect, useState } from "react";
+import { supabase } from "../supabaseclient";
+import { toast } from "react-toastify";
+
+function formatPrice(vnd) {
+  if (!vnd && vnd !== 0) return "";
+  return Number(vnd).toLocaleString("vi-VN") + " ₫";
+}
+
+const emptyProduct = {
+  id: null,
+  name: "",
+  price: "",
+  category: "",
+  main_image_url: "",
+  description: "",
+};
 
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
 
-  const [form, setForm] = useState({
-    name: '', price: '', category: '', image_url: '', description: '', in_stock: true, stock_quantity: ''
-  });
-  const [editingId, setEditingId] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(emptyProduct);
+  const [saving, setSaving] = useState(false);
+
+  // ==========================
+  // LOAD DANH SÁCH SẢN PHẨM
+  // ==========================
+  const fetchProducts = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      toast.error("Không tải được danh sách sản phẩm!");
+    } else {
+      setProducts(data || []);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
     fetchProducts();
   }, []);
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) alert('Lỗi tải sản phẩm: ' + error.message);
-    else setProducts(data || []);
-    setLoading(false);
+  // ==========================
+  // MỞ / ĐÓNG MODAL
+  // ==========================
+  const openNewModal = () => {
+    setForm(emptyProduct);
+    setModalOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!form.name.trim() || !form.price || !form.image_url.trim()) {
-      alert('Vui lòng nhập: Tên sản phẩm, Giá và ít nhất 1 ảnh!');
+  const openEditModal = (product) => {
+    setForm({
+      id: product.id,
+      name: product.name || "",
+      price: product.price || "",
+      category: product.category || "",
+      main_image_url: product.main_image_url || "",
+      description: product.description || "",
+    });
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    if (saving) return;
+    setModalOpen(false);
+    setForm(emptyProduct);
+  };
+
+  // ==========================
+  // HANDLE INPUT
+  // ==========================
+  const handleChange = (field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  // ==========================
+  // THÊM / SỬA SẢN PHẨM
+  // ==========================
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      toast.warning("Vui lòng nhập tên sản phẩm.");
+      return;
+    }
+    if (!form.price || isNaN(Number(form.price))) {
+      toast.warning("Giá phải là số.");
       return;
     }
 
-    if (isNaN(form.price) || Number(form.price) <= 0) {
-      alert('Giá phải là số dương!');
-      return;
-    }
-
-    const imageUrls = form.image_url
-      .split(',')
-      .map(u => u.trim())
-      .filter(u => u.length > 0);
-
-    if (imageUrls.length === 0) {
-      alert('Phải có ít nhất 1 link ảnh hợp lệ!');
-      return;
-    }
+    setSaving(true);
 
     const payload = {
       name: form.name.trim(),
       price: Number(form.price),
-      category: form.category.trim() || 'Uncategorized',
-      image_url: imageUrls,
+      category: form.category.trim() || null,
+      main_image_url: form.main_image_url.trim() || null,
       description: form.description.trim() || null,
-      in_stock: form.in_stock,
-      stock_quantity: form.stock_quantity ? Number(form.stock_quantity) : null,
     };
 
-    setSaving(true);
-    try {
-      if (editingId) {
-        const { error } = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', editingId);
-        if (error) throw error;
-        alert('Cập nhật thành công!');
-      } else {
-        const { error } = await supabase
-          .from('products')
-          .insert(payload);
-        if (error) throw error;
-        alert('Thêm sản phẩm thành công!');
-      }
+    let error;
+    if (form.id) {
+      // UPDATE
+      const { error: err } = await supabase
+        .from("products")
+        .update(payload)
+        .eq("id", form.id);
+      error = err;
+    } else {
+      // INSERT
+      const { error: err } = await supabase.from("products").insert(payload);
+      error = err;
+    }
 
-      resetForm();
-      fetchProducts();
-    } catch (err) {
-      alert('Lỗi: ' + err.message);
-    } finally {
-      setSaving(false);
+    if (error) {
+      console.error(error);
+      toast.error("Lưu sản phẩm thất bại!");
+    } else {
+      toast.success(form.id ? "Đã cập nhật sản phẩm." : "Đã thêm sản phẩm mới.");
+      await fetchProducts();
+      setModalOpen(false);
+      setForm(emptyProduct);
+    }
+
+    setSaving(false);
+  };
+
+  // ==========================
+  // XÓA SẢN PHẨM
+  // ==========================
+  const handleDelete = async (product) => {
+    const ok = window.confirm(
+      `Bạn chắc chắn muốn xóa "${product.name}"? Hành động này không thể hoàn tác.`
+    );
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", product.id);
+
+    if (error) {
+      console.error(error);
+      toast.error("Xóa sản phẩm thất bại!");
+    } else {
+      toast.success("Đã xóa sản phẩm.");
+      setProducts((prev) => prev.filter((p) => p.id !== product.id));
     }
   };
 
-  const startEdit = (p) => {
-    setForm({
-      name: p.name || '',
-      price: p.price || '',
-      category: p.category || '',
-      image_url: Array.isArray(p.image_url) ? p.image_url.join(', ') : p.image_url || '',
-      description: p.description || '',
-      in_stock: p.in_stock !== false,
-      stock_quantity: p.stock_quantity || ''
-    });
-    setEditingId(p.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const resetForm = () => {
-    setForm({ name: '', price: '', category: '', image_url: '', description: '', in_stock: true, stock_quantity: '' });
-    setEditingId(null);
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('XÓA VĨNH VIỄN sản phẩm này? Không thể khôi phục!')) return;
-    setDeletingId(id);
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) alert('Xóa thất bại: ' + error.message);
-    else fetchProducts();
-    setDeletingId(null);
-  };
-
-  // Preview ảnh đầu tiên
-  const previewUrls = form.image_url
-    .split(',')
-    .map(u => u.trim())
-    .filter(Boolean);
-
-  const firstImage = previewUrls[0];
-
+  // ==========================
+  // UI
+  // ==========================
   return (
-    <div>
-      {/* Tiêu đề */}
-      <h1 style={{
-        fontSize: '52px',
-        margin: '0 0 60px',
-        fontFamily: '"Playfair Display", serif',
-        textAlign: 'center',
-        background: 'linear-gradient(90deg, #A51C30, #ff6b6b)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        fontWeight: 'bold',
-        letterSpacing: '2px'
-      }}>
-        Quản lý sản phẩm ({products.length})
-      </h1>
-
-      {/* Form thêm/sửa */}
-      <div style={{
-        background: 'linear-gradient(135deg, #222 0%, #1a1a1a 100%)',
-        padding: '50px',
-        borderRadius: '28px',
-        marginBottom: '80px',
-        boxShadow: '0 20px 60px rgba(165,28,48,0.25)',
-        border: '1px solid rgba(165,28,48,0.3)'
-      }}>
-        <h2 style={{ fontSize: '36px', color: '#A51C30', margin: '0 0 40px', textAlign: 'center' }}>
-          {editingId ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới'}
-        </h2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
-          <div>
-            <input placeholder="Tên sản phẩm *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
-            <input type="number" placeholder="Giá bán (VNĐ) *" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} style={inputStyle} />
-            <input placeholder="Danh mục (VD: Nhẫn cưới, Vòng cổ)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inputStyle} />
-            <input placeholder="Link ảnh (ngăn cách bằng dấu phẩy)" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} style={inputStyle} />
-            
-            <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ddd', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.in_stock} onChange={e => setForm({ ...form, in_stock: e.target.checked })} />
-                Còn hàng
-              </label>
-              <input 
-                type="number" 
-                placeholder="Số lượng tồn (tùy chọn)" 
-                value={form.stock_quantity} 
-                onChange={e => setForm({ ...form, stock_quantity: e.target.value })} 
-                style={{ ...inputStyle, width: '200px' }}
-              />
-            </div>
-          </div>
-
-          {/* Preview ảnh */}
-          <div>
-            <p style={{ margin: '0 0 16px', color: '#aaa', fontSize: '16px' }}>Preview ảnh đầu tiên:</p>
-            {firstImage ? (
-              <img
-                src={firstImage}
-                alt="Preview"
-                style={{
-                  width: '100%',
-                  height: '420px',
-                  objectFit: 'cover',
-                  borderRadius: '20px',
-                  boxShadow: '0 15px 40px rgba(0,0,0,0.5)',
-                  border: '3px solid #A51C30'
-                }}
-                onError={e => e.target.src = 'https://via.placeholder.com/500x420/f5f5f5/999?text=Ảnh+lỗi'}
-              />
-            ) : (
-              <div style={{
-                width: '100%',
-                height: '420px',
-                background: '#333',
-                borderRadius: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#666',
-                fontSize: '20px',
-                border: '3px dashed #555',
-                flexDirection: 'column',
-                gap: '16px'
-              }}>
-                Nhập link ảnh để xem trước
-              </div>
-            )}
-            {previewUrls.length > 1 && (
-              <div style={{ marginTop: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                {previewUrls.slice(1, 5).map((url, i) => (
-                  <img key={i} src={url} alt={`Thumb ${i+2}`} style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '12px' }} />
-                ))}
-                {previewUrls.length > 5 && <span style={{ color: '#aaa', alignSelf: 'center' }}>+{previewUrls.length - 5} ảnh</span>}
-              </div>
-            )}
-          </div>
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: "40px 40px 80px",
+        background: "radial-gradient(circle at top, #2a0f16 0, #050404 55%)",
+        color: "#fff",
+        fontFamily: "'Helvetica Neue', Arial, sans-serif",
+      }}
+    >
+      {/* HEADER */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "40px",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontFamily: '"Playfair Display", serif',
+              fontSize: "42px",
+              letterSpacing: "6px",
+            }}
+          >
+            QUẢN LÝ SẢN PHẨM
+          </h1>
+          <p style={{ marginTop: "10px", color: "#bbb" }}>
+            Thêm, chỉnh sửa và xoá các tuyệt tác trong bộ sưu tập DANIELLE.
+          </p>
         </div>
 
-        <textarea
-          placeholder="Mô tả sản phẩm (tùy chọn)"
-          value={form.description}
-          onChange={e => setForm({ ...form, description: e.target.value })}
-          style={{ ...inputStyle, height: '140px', resize: 'vertical', gridColumn: '1 / -1' }}
-        />
-
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', marginTop: '40px' }}>
-          <button onClick={handleSave} disabled={saving} style={{
-            ...btnPrimary,
-            padding: '18px 50px',
-            fontSize: '20px',
-            opacity: saving ? 0.7 : 1
-          }}>
-            {saving ? 'Đang lưu...' : editingId ? 'CẬP NHẬT' : 'THÊM MỚI'}
-          </button>
-          {editingId && (
-            <button onClick={resetForm} style={btnSecondary}>
-              Hủy chỉnh sửa
-            </button>
-          )}
-        </div>
+        <button
+          onClick={openNewModal}
+          style={{
+            padding: "14px 32px",
+            borderRadius: "999px",
+            border: "none",
+            background:
+              "linear-gradient(135deg, #A51C30 0%, #c52b40 50%, #A51C30 100%)",
+            color: "#fff",
+            fontWeight: "bold",
+            fontSize: "15px",
+            letterSpacing: "2px",
+            cursor: "pointer",
+            boxShadow: "0 12px 30px rgba(165, 28, 48, 0.5)",
+          }}
+        >
+          + THÊM SẢN PHẨM
+        </button>
       </div>
 
-      {/* Danh sách sản phẩm */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '100px', fontSize: '24px', color: '#aaa' }}>
-          Đang tải sản phẩm...
-        </div>
-      ) : products.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '120px', background: '#222', borderRadius: '28px' }}>
-          <p style={{ fontSize: '32px', color: '#aaa' }}>Chưa có sản phẩm nào</p>
-          <p style={{ color: '#666' }}>Hãy thêm sản phẩm đầu tiên!</p>
-        </div>
-      ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: '40px'
-        }}>
-          {products.map(p => (
-            <div
-              key={p.id}
+      {/* BẢNG SẢN PHẨM */}
+      <div
+        style={{
+          background: "rgba(10,10,10,0.9)",
+          borderRadius: "24px",
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.65)",
+          padding: "24px",
+          overflowX: "auto",
+        }}
+      >
+        {loading ? (
+          <div style={{ padding: "60px 20px", textAlign: "center" }}>
+            <p
               style={{
-                background: '#1a1a1a',
-                borderRadius: '28px',
-                overflow: 'hidden',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-                transition: 'all 0.5s ease',
-                border: '1px solid #333'
+                fontSize: "22px",
+                letterSpacing: "3px",
+                color: "#A51C30",
               }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-12px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
             >
-              <div style={{ position: 'relative' }}>
-                <img
-                  src={Array.isArray(p.image_url) ? p.image_url[0] : p.image_url}
-                  alt={p.name}
-                  style={{ width: '100%', height: '360px', objectFit: 'cover' }}
-                  onError={e => e.target.src = 'https://via.placeholder.com/400x360/f5f5f5/999?text=No+Image'}
+              Đang tải danh sách sản phẩm...
+            </p>
+          </div>
+        ) : products.length === 0 ? (
+          <div style={{ padding: "60px 20px", textAlign: "center" }}>
+            <p style={{ fontSize: "20px", color: "#ccc", marginBottom: "20px" }}>
+              Chưa có sản phẩm nào trong hệ thống.
+            </p>
+            <button
+              onClick={openNewModal}
+              style={{
+                padding: "14px 28px",
+                borderRadius: "999px",
+                border: "1px solid #A51C30",
+                background: "transparent",
+                color: "#A51C30",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              + Thêm sản phẩm đầu tiên
+            </button>
+          </div>
+        ) : (
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              minWidth: "900px",
+            }}
+          >
+            <thead>
+              <tr style={{ textAlign: "left", fontSize: "13px", opacity: 0.8 }}>
+                <th style={thStyle}>HÌNH</th>
+                <th style={thStyle}>TÊN SẢN PHẨM</th>
+                <th style={thStyle}>DANH MỤC</th>
+                <th style={thStyle}>GIÁ</th>
+                <th style={thStyle}>NGÀY TẠO</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>THAO TÁC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((p) => (
+                <tr
+                  key={p.id}
+                  style={{
+                    borderTop: "1px solid rgba(255,255,255,0.04)",
+                    borderBottom: "1px solid rgba(255,255,255,0.02)",
+                  }}
+                >
+                  {/* IMAGE */}
+                  <td style={tdStyle}>
+                    {p.main_image_url ? (
+                      <img
+                        src={p.main_image_url}
+                        alt={p.name}
+                        style={{
+                          width: "70px",
+                          height: "70px",
+                          objectFit: "cover",
+                          borderRadius: "16px",
+                          border: "1px solid #333",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "70px",
+                          height: "70px",
+                          borderRadius: "16px",
+                          background:
+                            "linear-gradient(135deg,#222,#111,#2b0c14)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "11px",
+                          color: "#777",
+                        }}
+                      >
+                        No image
+                      </div>
+                    )}
+                  </td>
+
+                  {/* NAME + DESCRIPTION */}
+                  <td style={tdStyle}>
+                    <div style={{ fontWeight: 600, marginBottom: "6px" }}>
+                      {p.name}
+                    </div>
+                    {p.description && (
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: "#aaa",
+                          maxWidth: "420px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {p.description}
+                      </div>
+                    )}
+                  </td>
+
+                  {/* CATEGORY */}
+                  <td style={tdStyle}>
+                    <span
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: "999px",
+                        background: "rgba(255,255,255,0.05)",
+                        fontSize: "12px",
+                        textTransform: "uppercase",
+                        letterSpacing: "1px",
+                      }}
+                    >
+                      {p.category || "—"}
+                    </span>
+                  </td>
+
+                  {/* PRICE */}
+                  <td style={tdStyle}>
+                    <span
+                      style={{
+                        color: "#ffb3c0",
+                        fontWeight: "bold",
+                        fontSize: "15px",
+                      }}
+                    >
+                      {formatPrice(p.price)}
+                    </span>
+                  </td>
+
+                  {/* CREATED AT */}
+                  <td style={tdStyle}>
+                    {p.created_at
+                      ? new Date(p.created_at).toLocaleString("vi-VN")
+                      : "—"}
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td style={{ ...tdStyle, textAlign: "right" }}>
+                    <button
+                      onClick={() => openEditModal(p)}
+                      style={{
+                        padding: "8px 18px",
+                        borderRadius: "999px",
+                        border: "1px solid rgba(255,255,255,0.3)",
+                        background: "transparent",
+                        color: "#fff",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        marginRight: "10px",
+                      }}
+                    >
+                      Sửa
+                    </button>
+                    <button
+                      onClick={() => handleDelete(p)}
+                      style={{
+                        padding: "8px 18px",
+                        borderRadius: "999px",
+                        border: "1px solid #ff6b6b",
+                        background: "rgba(255,107,107,0.08)",
+                        color: "#ff8a8a",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Xóa
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* MODAL THÊM / SỬA */}
+      {modalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            style={{
+              width: "640px",
+              maxWidth: "95%",
+              background: "#0b090a",
+              borderRadius: "26px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.8)",
+              padding: "28px 30px 34px",
+              position: "relative",
+            }}
+          >
+            <h2
+              style={{
+                margin: "0 0 20px",
+                fontFamily: '"Playfair Display", serif',
+                fontSize: "26px",
+                letterSpacing: "3px",
+              }}
+            >
+              {form.id ? "CHỈNH SỬA SẢN PHẨM" : "THÊM SẢN PHẨM MỚI"}
+            </h2>
+
+            <form onSubmit={handleSave}>
+              <label style={labelStyle}>
+                Tên sản phẩm
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => handleChange("name", e.target.value)}
+                  style={inputStyle}
+                  required
                 />
-                {!p.in_stock && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '20px',
-                    left: '20px',
-                    background: '#000',
-                    color: 'white',
-                    padding: '10px 20px',
-                    borderRadius: '30px',
-                    fontWeight: 'bold',
-                    fontSize: '14px'
-                  }}>
-                    HẾT HÀNG
-                  </div>
-                )}
+              </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "16px",
+                  marginTop: "14px",
+                }}
+              >
+                <label style={{ ...labelStyle, flex: 1 }}>
+                  Giá (VND)
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.price}
+                    onChange={(e) => handleChange("price", e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                </label>
+
+                <label style={{ ...labelStyle, flex: 1 }}>
+                  Danh mục
+                  <input
+                    type="text"
+                    placeholder="women / men / handcrafted..."
+                    value={form.category}
+                    onChange={(e) => handleChange("category", e.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
               </div>
 
-              <div style={{ padding: '32px' }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: '24px', fontWeight: '600', color: '#fff' }}>
-                  {p.name}
-                </h3>
-                {p.category && (
-                  <p style={{ color: '#ff6b6b', fontSize: '15px', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '2px' }}>
-                    {p.category}
-                  </p>
-                )}
-                <p style={{ color: '#A51C30', fontSize: '28px', fontWeight: 'bold', margin: '16px 0' }}>
-                  {p.price.toLocaleString()} ₫
-                </p>
-                {p.stock_quantity !== null && (
-                  <p style={{ color: p.stock_quantity <= 5 ? '#ff6b6b' : '#aaa', fontSize: '14px' }}>
-                    Còn lại: {p.stock_quantity} sản phẩm
-                  </p>
-                )}
+              <label style={labelStyle}>
+                Ảnh chính (URL)
+                <input
+                  type="text"
+                  placeholder="https://..."
+                  value={form.main_image_url}
+                  onChange={(e) =>
+                    handleChange("main_image_url", e.target.value)
+                  }
+                  style={inputStyle}
+                />
+              </label>
 
-                <div style={{ display在他的: 'flex', gap: '16px', marginTop: '24px' }}>
-                  <button onClick={() => startEdit(p)} style={btnEdit}>
-                    Sửa
-                  </button>
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    disabled={deletingId === p.id}
-                    style={{
-                      ...btnDelete,
-                      opacity: deletingId === p.id ? 0.7 : 1
-                    }}
-                  >
-                    {deletingId === p.id ? 'Đang xóa...' : 'Xóa'}
-                  </button>
-                </div>
+              <label style={labelStyle}>
+                Mô tả
+                <textarea
+                  rows={4}
+                  value={form.description}
+                  onChange={(e) =>
+                    handleChange("description", e.target.value)
+                  }
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+              </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "14px",
+                  marginTop: "26px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={saving}
+                  style={{
+                    padding: "12px 24px",
+                    borderRadius: "999px",
+                    border: "1px solid #555",
+                    background: "transparent",
+                    color: "#ccc",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                  }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{
+                    padding: "12px 28px",
+                    borderRadius: "999px",
+                    border: "none",
+                    background:
+                      "linear-gradient(135deg,#A51C30,#c52b40,#A51C30)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                    fontSize: "14px",
+                    letterSpacing: "2px",
+                    boxShadow: "0 10px 26px rgba(165,28,48,0.6)",
+                  }}
+                >
+                  {saving ? "ĐANG LƯU..." : "LƯU LẠI"}
+                </button>
               </div>
-            </div>
-          ))}
+            </form>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// Styles sang trọng
+const thStyle = {
+  padding: "14px 14px",
+  fontWeight: 600,
+  color: "#bbb",
+  textTransform: "uppercase",
+  fontSize: "11px",
+  letterSpacing: "1px",
+};
+
+const tdStyle = {
+  padding: "18px 14px",
+  fontSize: "14px",
+  verticalAlign: "middle",
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: "13px",
+  color: "#ccc",
+  marginTop: "14px",
+  marginBottom: "6px",
+};
+
 const inputStyle = {
-  width: '100%',
-  padding: '18px 22px',
-  marginBottom: '20px',
-  background: '#333',
-  border: '2px solid transparent',
-  borderRadius: '16px',
-  color: 'white',
-  fontSize: '16px',
-  transition: 'all 0.3s ease',
-  ':focus': { borderColor: '#A51C30', outline: 'none' }
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: "10px",
+  border: "1px solid #333",
+  background: "#151515",
+  color: "#fff",
+  fontSize: "14px",
+  outline: "none",
+  boxSizing: "border-box",
 };
-
-const btnPrimary = {
-  padding: '18px 50px',
-  background: '#A51C30',
-  color: 'white',
-  border: 'none',
-  borderRadius: '50px',
-  cursor: 'pointer',
-  fontSize: '18px',
-  fontWeight: 'bold',
-  boxShadow: '0 10px 30px rgba(165,28,48,0.4)',
-  transition: 'all 0.4s ease'
-};
-
-const btnSecondary = {
-  ...btnPrimary,
-  background: '#666',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
-};
-
-const btnEdit = {
-  flex: 1,
-  padding: '16px',
-  background: '#0066cc',
-  color: 'white',
-  border: 'none',
-  borderRadius: '16px',
-  cursor: 'pointer',
-  fontWeight: 'bold',
-  fontSize: '16px',
-  transition: 'all 0.3s'
-};
-
-const btnDelete = {
-  ...btnEdit,
-  background: '#cc0000'
-};
+//src/pages/AdminProducts.jsx

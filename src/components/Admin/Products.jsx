@@ -1,315 +1,304 @@
-// src/pages/admin/Products.jsx
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../supabaseclient';
+// src/components/admin/Products.jsx
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../../supabaseclient";
+import ProductForm from "./products/ProductForm";
+import ProductSearchFilter from "./products/ProductSearchFilter";
+import ProductList from "./products/ProductList";
+import ProductDetailModal from "./products/ProductDetailModal";
+import ProductEditModal from "./products/ProductEditModal";
+import Pagination from "./products/Pagination";
+import "./products/products.css";
 
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const [form, setForm] = useState({
-    name: '',
-    price: '',
-    category: '',
-    image_url: '',
-    description: ''
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [filterState, setFilterState] = useState({
+    search: "",
+    category: "all",
+    stock: "all",
+    sortBy: "newest",
+    minPrice: "",
+    maxPrice: "",
   });
-  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
 
-  // Tải danh sách sản phẩm
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
+
+  // Load products từ Supabase
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from("products")
+        .select("id, name, price, category, images, description, in_stock, created_at")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setProducts(data || []);
+
+      // Chuẩn hóa dữ liệu
+      const normalized = (data || []).map((p) => ({
+        ...p,
+        images: Array.isArray(p.images)
+          ? p.images
+          : p.images
+          ? [p.images]
+          : [],
+        in_stock:
+          typeof p.in_stock === "boolean" ? p.in_stock : true,
+      }));
+
+      setProducts(normalized);
+      setFilteredProducts(applyFilter(normalized, filterState));
+      setCurrentPage(1);
     } catch (err) {
-      alert('Lỗi tải sản phẩm: ' + err.message);
+      console.error("Lỗi tải sản phẩm:", err);
+      alert("Lỗi tải sản phẩm: " + err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterState]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const handleSave = async () => {
-    if (!form.name.trim() || !form.price || !form.image_url.trim()) {
-      return alert('Vui lòng nhập đầy đủ: Tên, Giá và ít nhất 1 link ảnh!');
+  // Hàm áp dụng filter + sort
+  const applyFilter = (list, filter) => {
+    let result = [...list];
+
+    // Search
+    if (filter.search.trim() !== "") {
+      const kw = filter.search.trim().toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name?.toLowerCase().includes(kw) ||
+          p.category?.toLowerCase().includes(kw) ||
+          p.description?.toLowerCase().includes(kw) ||
+          String(p.id).toLowerCase().includes(kw)
+      );
     }
 
-    if (isNaN(form.price) || Number(form.price) <= 0) {
-      return alert('Giá phải là số dương!');
+    // Category
+    if (filter.category !== "all") {
+      result = result.filter((p) => p.category === filter.category);
     }
 
-    const imageUrls = form.image_url
-      .split(',')
-      .map(url => url.trim())
-      .filter(url => url);
+    // Stock
+    if (filter.stock === "in_stock") {
+      result = result.filter((p) => p.in_stock);
+    } else if (filter.stock === "out_of_stock") {
+      result = result.filter((p) => !p.in_stock);
+    }
 
-    if (imageUrls.length === 0) return alert('Phải có ít nhất 1 ảnh hợp lệ!');
+    // Price range
+    const min = filter.minPrice ? Number(filter.minPrice) : null;
+    const max = filter.maxPrice ? Number(filter.maxPrice) : null;
 
-    const payload = {
-      name: form.name.trim(),
-      price: Number(form.price),
-      category: form.category.trim() || 'Uncategorized',
-      image_url: imageUrls,
-      description: form.description.trim() || null
-    };
+    if (min != null && !isNaN(min)) {
+      result = result.filter((p) => Number(p.price) >= min);
+    }
+    if (max != null && !isNaN(max)) {
+      result = result.filter((p) => Number(p.price) <= max);
+    }
 
-    setSaving(true);
+    // Sort
+    switch (filter.sortBy) {
+      case "price_asc":
+        result.sort((a, b) => a.price - b.price);
+        break;
+      case "price_desc":
+        result.sort((a, b) => b.price - a.price);
+        break;
+      case "name_asc":
+        result.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "oldest":
+        result.sort(
+          (a, b) =>
+            new Date(a.created_at) - new Date(b.created_at)
+        );
+        break;
+      case "newest":
+      default:
+        result.sort(
+          (a, b) =>
+            new Date(b.created_at) - new Date(a.created_at)
+        );
+        break;
+    }
+
+    return result;
+  };
+
+  // Khi thay đổi filter từ thanh search/filter
+  const handleFilterChange = (newFilter) => {
+    const merged = { ...filterState, ...newFilter };
+    setFilterState(merged);
+    const result = applyFilter(products, merged);
+    setFilteredProducts(result);
+    setCurrentPage(1);
+  };
+
+  // Tạo sản phẩm mới
+  const handleCreateProduct = async (data) => {
     try {
-      if (editingId) {
-        const { error } = await supabase
-          .from('products')
-          .update(payload)
-          .eq('id', editingId);
-        if (error) throw error;
-        alert('Cập nhật thành công!');
-      } else {
-        const { error } = await supabase.from('products').insert(payload);
-        if (error) throw error;
-        alert('Thêm sản phẩm thành công!');
-      }
+      const payload = {
+        name: data.name.trim(),
+        price: Number(data.price),
+        category: data.category.trim() || "Uncategorized",
+        images: data.images,
+        description: data.description.trim() || null,
+        in_stock: data.in_stock,
+      };
 
-      resetForm();
-      fetchProducts();
+      const { error } = await supabase
+        .from("products")
+        .insert(payload);
+
+      if (error) throw error;
+
+      alert("Thêm sản phẩm thành công!");
+      await fetchProducts();
+      return { ok: true };
     } catch (err) {
-      alert('Lỗi: ' + err.message);
-    } finally {
-      setSaving(false);
+      console.error(err);
+      alert("Lỗi thêm sản phẩm: " + err.message);
+      return { ok: false, error: err.message };
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Xóa vĩnh viễn sản phẩm này? Không thể khôi phục!')) return;
+  // Cập nhật sản phẩm
+  const handleUpdateProduct = async (id, data) => {
+    try {
+      const payload = {
+        name: data.name.trim(),
+        price: Number(data.price),
+        category: data.category.trim() || "Uncategorized",
+        images: data.images,
+        description: data.description.trim() || null,
+        in_stock: data.in_stock,
+      };
 
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) {
-      alert('Xóa thất bại: ' + error.message);
-    } else {
-      setProducts(prev => prev.filter(p => p.id !== id));
+      const { error } = await supabase
+        .from("products")
+        .update(payload)
+        .eq("id", id);
+
+      if (error) throw error;
+
+      alert("Cập nhật sản phẩm thành công!");
+      setEditingProduct(null);
+      await fetchProducts();
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi cập nhật sản phẩm: " + err.message);
     }
   };
 
-  const startEdit = (p) => {
-    setForm({
-      name: p.name || '',
-      price: p.price || '',
-      category: p.category || '',
-      image_url: Array.isArray(p.image_url) ? p.image_url.join(', ') : p.image_url || '',
-      description: p.description || ''
-    });
-    setEditingId(p.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Xóa sản phẩm
+  const handleDeleteProduct = async (id) => {
+    if (
+      !window.confirm(
+        "Xóa vĩnh viễn sản phẩm này? Không thể khôi phục!"
+      )
+    )
+      return;
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      setFilteredProducts((prev) =>
+        prev.filter((p) => p.id !== id)
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Xóa thất bại: " + err.message);
+    }
   };
 
-  const resetForm = () => {
-    setForm({ name: '', price: '', category: '', image_url: '', description: '' });
-    setEditingId(null);
-  };
-
-  // Preview ảnh đầu tiên
-  const firstImage = form.image_url.split(',')[0]?.trim();
+  // Pagination
+  const totalItems = filteredProducts.length;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalItems / pageSize)
+  );
+  const start = (currentPage - 1) * pageSize;
+  const end = start + pageSize;
+  const pageItems = filteredProducts.slice(start, end);
 
   return (
-    <div style={{ color: 'white', minHeight: '100vh' }}>
-      <h1 style={{
-        fontSize: '42px',
-        marginBottom: '40px',
-        fontFamily: '"Playfair Display", serif',
-        textAlign: 'center',
-        background: 'linear-gradient(90deg, #A51C30, #ff6b6b)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        fontWeight: 'bold'
-      }}>
-        Quản lý sản phẩm ({products.length})
+    <div className="ap-container">
+      <h1 className="ap-title">
+        Quản lý sản phẩm{" "}
+        <span className="ap-title-count">
+          ({products.length})
+        </span>
       </h1>
 
-      {/* Form thêm/sửa */}
-      <div style={{
-        background: '#222',
-        padding: '32px',
-        borderRadius: '20px',
-        marginBottom: '50px',
-        boxShadow: '0 10px 30px rgba(165, 28, 48, 0.2)',
-        border: '1px solid #A51C30'
-      }}>
-        <h2 style={{ color: '#A51C30', marginBottom: '24px', fontSize: '28px' }}>
-          {editingId ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới'}
-        </h2>
+      {/* Form thêm mới */}
+      <ProductForm onCreate={handleCreateProduct} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <input placeholder="Tên sản phẩm *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
-            <input placeholder="Giá bán (VNĐ) *" type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} style={inputStyle} />
-            <input placeholder="Danh mục (VD: Hoa hồng, Hoa cưới)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inputStyle} />
-            <input placeholder="Link ảnh (ngăn cách bằng dấu phẩy)" value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} style={inputStyle} />
-            <textarea placeholder="Mô tả sản phẩm (tùy chọn)" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ ...inputStyle, height: '120px', resize: 'vertical' }} />
-          </div>
-
-          {/* Preview ảnh */}
-          <div>
-            <p style={{ margin: '0 0 12px', color: '#aaa' }}>Preview ảnh đầu tiên:</p>
-            {firstImage ? (
-              <img
-                src={firstImage}
-                alt="Preview"
-                style={{
-                  width: '100%',
-                  height: '380px',
-                  objectFit: 'cover',
-                  borderRadius: '16px',
-                  boxShadow: '0 8px 20px rgba(0,0,0,0.4)'
-                }}
-                onError={(e) => { e.target.src = 'https://via.placeholder.com/400x380/f5f5f5/999?text=Ảnh+lỗi'; }}
-              />
-            ) : (
-              <div style={{
-                width: '100%',
-                height: '380px',
-                background: '#333',
-                borderRadius: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#666',
-                fontSize: '18px',
-                border: '2px dashed #555'
-              }}>
-                Nhập link ảnh để xem trước
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '16px', marginTop: '24px', justifyContent: 'center' }}>
-          <button onClick={handleSave} disabled={saving} style={{
-            ...btnRed,
-            padding: '16px 40px',
-            fontSize: '18px',
-            opacity: saving ? 0.7 : 1
-          }}>
-            {saving ? 'Đang lưu...' : editingId ? 'CẬP NHẬT' : 'THÊM MỚI'}
-          </button>
-          {editingId && (
-            <button onClick={resetForm} style={btnGray}>
-              Hủy chỉnh sửa
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Thanh search + filter */}
+      <ProductSearchFilter
+        filter={filterState}
+        onChange={handleFilterChange}
+      />
 
       {/* Danh sách sản phẩm */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '80px', fontSize: '20px', color: '#aaa' }}>
+        <div className="ap-loading">
           Đang tải sản phẩm...
         </div>
-      ) : products.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '100px', background: '#222', borderRadius: '20px' }}>
-          <p style={{ fontSize: '24px', color: '#aaa' }}>Chưa có sản phẩm nào</p>
-          <p>Hãy thêm sản phẩm đầu tiên!</p>
+      ) : totalItems === 0 ? (
+        <div className="ap-empty">
+          <p>Chưa có sản phẩm nào phù hợp.</p>
+          <p>Hãy thêm sản phẩm mới ở phía trên.</p>
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: '28px'
-        }}>
-          {products.map(p => (
-            <div
-              key={p.id}
-              style={{
-                background: '#222',
-                borderRadius: '20px',
-                overflow: 'hidden',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
-                transition: 'all 0.3s',
-                border: '1px solid #333'
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-8px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <img
-                src={Array.isArray(p.image_url) ? p.image_url[0] : p.image_url}
-                alt={p.name}
-                style={{
-                  width: '100%',
-                  height: '300px',
-                  objectFit: 'cover'
-                }}
-                onError={(e) => { e.target.src = 'https://via.placeholder.com/400x300/f5f5f5/999?text=No+Image'; }}
-              />
-              <div style={{ padding: '24px' }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: '20px', fontWeight: 'bold' }}>
-                  {p.name}
-                </h3>
-                <p style={{ color: '#A51C30', fontWeight: 'bold', fontSize: '24px', margin: '8px 0' }}>
-                  {p.price.toLocaleString()} ₫
-                </p>
-                {p.category && (
-                  <p style={{ fontSize: '14px', color: '#ff6b6b', background: '#333', display: 'inline-block', padding: '4px 12px', borderRadius: '20px' }}>
-                    {p.category}
-                  </p>
-                )}
-                <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-                  <button onClick={() => startEdit(p)} style={btnBlue}>
-                    Sửa
-                  </button>
-                  <button onClick={() => handleDelete(p.id)} style={btnRed}>
-                    Xóa
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <>
+          <ProductList
+            products={pageItems}
+            onViewDetail={(p) => setSelectedProduct(p)}
+            onEdit={(p) => setEditingProduct(p)}
+            onDelete={handleDeleteProduct}
+          />
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onChange={setCurrentPage}
+          />
+        </>
+      )}
+
+      {/* Modal chi tiết */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
+
+      {/* Modal chỉnh sửa */}
+      {editingProduct && (
+        <ProductEditModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSave={(data) =>
+            handleUpdateProduct(editingProduct.id, data)
+          }
+        />
       )}
     </div>
   );
 }
-
-// Styles (giữ nguyên đẹp như cũ, chỉ nâng cấp chút)
-const inputStyle = {
-  width: '100%',
-  padding: '16px 18px',
-  marginBottom: '0',
-  background: '#333',
-  border: '2px solid transparent',
-  borderRadius: '12px',
-  color: 'white',
-  fontSize: '16px',
-  transition: 'all 0.2s',
-  ':focus': { borderColor: '#A51C30', outline: 'none' }
-};
-
-const btnRed = {
-  padding: '14px 32px',
-  background: '#A51C30',
-  color: 'white',
-  border: 'none',
-  borderRadius: '12px',
-  cursor: 'pointer',
-  fontWeight: 'bold',
-  fontSize: '16px',
-  transition: 'all 0.2s',
-  ':hover': { background: '#c51c35' }
-};
-
-const btnBlue = {
-  ...btnRed,
-  background: '#0066cc',
-  ':hover': { background: '#0052a3' }
-};
-
-const btnGray = {
-  ...btnRed,
-  background: '#666',
-  ':hover': { background: '#555' }
-};

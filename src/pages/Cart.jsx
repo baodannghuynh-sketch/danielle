@@ -3,9 +3,9 @@ import { useCartStore } from '../store/useCartStore';
 import { Link } from 'react-router-dom';
 
 export default function Cart() {
-  const { items, updateQuantity, removeItem, getTotal, getCount, clear } = useCartStore();
+  const { items, updateQuantity, removeItem, totalPrice, getCount, clear } = useCartStore();
 
-  const total = getTotal();
+  const total = totalPrice();
   const itemCount = getCount();
 
   if (itemCount === 0) {
@@ -304,3 +304,4 @@ const qtyBtn = {
   justifyContent: 'center',
   transition: 'all 0.3s'
 };
+// src/pages/Cart.jsx

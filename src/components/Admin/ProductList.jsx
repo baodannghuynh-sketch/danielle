@@ -1,7 +1,28 @@
 // src/components/admin/ProductList.jsx
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../supabaseclient';
+import ProductCard from "./ProductCard";
 
+export default function ProductList({
+  products,
+  onViewDetail,
+  onEdit,
+  onDelete,
+}) {
+  return (
+    <div className="ap-grid">
+      {products.map((p) => (
+        <ProductCard
+          key={p.id}
+          product={p}
+          onViewDetail={onViewDetail}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
 export default function ProductList({ refreshTrigger }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
