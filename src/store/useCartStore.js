@@ -46,6 +46,22 @@ export const useCartStore = create((set, get) => ({
     get().persist();
   },
 
+  // Cart.jsx đang dùng updateQuantity(id, newQty)
+  updateQuantity: (id, quantity) => {
+    let items = [...get().items];
+
+    if (quantity <= 0) {
+      items = items.filter((i) => i.id !== id);
+    } else {
+      items = items.map((i) =>
+        i.id === id ? { ...i, quantity } : i
+      );
+    }
+
+    set({ items });
+    get().persist();
+  },
+
   increaseQuantity: (id) => {
     const items = get().items.map((i) =>
       i.id === id ? { ...i, quantity: i.quantity + 1 } : i
@@ -69,11 +85,13 @@ export const useCartStore = create((set, get) => ({
     get().persist();
   },
 
-  getCount: () =>
-    get().items.reduce((sum, i) => sum + i.quantity, 0),
+  getCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
 
   totalPrice: () =>
-    get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+    get().items.reduce(
+      (sum, i) => sum + i.price * i.quantity,
+      0
+    ),
 
   // ---------------- WISHLIST ----------------
   toggleWishlist: (p) => {
@@ -94,14 +112,9 @@ export const useCartStore = create((set, get) => ({
   addRecentViewed: (p) => {
     let r = [...get().recentViewed];
 
-    // xóa nếu đã tồn tại
-    r = r.filter((i) => i.id !== p.id);
-
-    // thêm vào đầu danh sách
-    r.unshift(p);
-
-    // chỉ giữ 10 sản phẩm gần nhất
-    if (r.length > 10) r.pop();
+    r = r.filter((i) => i.id !== p.id); // xoá nếu đã tồn tại
+    r.unshift(p); // thêm đầu
+    if (r.length > 10) r.pop(); // giữ 10 sản phẩm
 
     set({ recentViewed: r });
     get().persist();
