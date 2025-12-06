@@ -1,13 +1,14 @@
 // src/components/Navbar.jsx
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseclient";
 
 export default function Navbar({ user, profile, isAdmin }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const dropdownRef = useRef(null);
-
   const [open, setOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -20,103 +21,126 @@ export default function Navbar({ user, profile, isAdmin }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Logout
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setOpen(false);
+  }, [location.pathname]);
+
+    // Logout
+   const handleLogout = async () => {
+  try {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("Supabase signOut error:", error);
+      alert("Đăng xuất thất bại!");
+      return;
+    }
+
+    // Xoá role
     localStorage.removeItem("isAdmin");
+
+    // Điều hướng
     navigate("/");
-  };
+
+    // Reset app state
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+
+  } catch (err) {
+    console.error("Unexpected logout error:", err);
+  }
+};
+
+
 
   const firstLetter =
     profile?.full_name?.charAt(0)?.toUpperCase() ||
     user?.email?.charAt(0)?.toUpperCase() ||
     "U";
 
-  return (
-    <header
-      style={{
-        background: "linear-gradient(135deg, #A51C30 0%, #c51c35 100%)",
-        padding: "1.4rem 0",
-        color: "white",
-        position: "fixed",
-        width: "100%",
-        top: 0,
-        zIndex: 999,
-        boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
-      }}
-    >
-      <nav
-        style={{
-          maxWidth: "1400px",
-          margin: "0 auto",
-          padding: "0 5vw",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        {/* LOGO */}
-        <Link
-          to="/"
-          style={{
-            fontSize: "42px",
-            color: "white",
-            textDecoration: "none",
-            letterSpacing: "14px",
-            fontWeight: 300,
-            fontFamily: '"Playfair Display", serif',
-          }}
-        >
-          DANIELLE
-        </Link>
+  const isAdminRoute = location.pathname.startsWith("/admin");
 
-        {/* ICONS */}
-        <div style={{ display: "flex", gap: "44px" }}>
-          <Icon to="/" icon="home" />
-          <Icon to="/shop" icon="bag" />
-          <Icon to="/cart" icon="cart" />
+  return (
+    <header className="nav-root">
+      <nav className="nav-inner">
+        {/* LOGO */}
+        <div className="nav-left">
+          <Link to={isAdmin ? "/admin" : "/"} className="nav-logo">
+            DANIELLE
+            {isAdmin && <span className="nav-logo-admin">ADMIN</span>}
+          </Link>
         </div>
 
-        {/* USER AREA */}
-        <div ref={dropdownRef} style={{ position: "relative" }}>
+        {/* DESKTOP MENU */}
+        <div className="nav-center nav-center-desktop">
+          {isAdmin ? (
+            <>
+              <TopLink to="/admin" active={isAdminRoute && location.pathname === "/admin"}>
+                Dashboard
+              </TopLink>
+              <TopLink
+                to="/admin/products"
+                active={location.pathname.startsWith("/admin/products")}
+              >
+                Sản phẩm
+              </TopLink>
+              <TopLink
+                to="/admin/orders"
+                active={location.pathname.startsWith("/admin/orders")}
+              >
+                Đơn hàng
+              </TopLink>
+              <TopLink to="/admin/users">Người dùng</TopLink>
+              <TopLink to="/shop">Xem shop</TopLink>
+            </>
+          ) : (
+            <>
+              <TopLink to="/" active={location.pathname === "/"}>
+                Trang chủ
+              </TopLink>
+              <TopLink to="/shop" active={location.pathname === "/shop"}>
+                Shop
+              </TopLink>
+              <TopLink to="/men" active={location.pathname === "/men"}>
+                Men
+              </TopLink>
+              <TopLink to="/women" active={location.pathname === "/women"}>
+                Women
+              </TopLink>
+              <TopLink
+                to="/handcrafted"
+                active={location.pathname === "/handcrafted"}
+              >
+                Diamond
+              </TopLink>
+            </>
+          )}
+        </div>
+
+        {/* ICONS + USER (DESKTOP) */}
+        <div className="nav-right nav-right-desktop" ref={dropdownRef}>
+          {!isAdmin && (
+            <div className="nav-icons">
+              <Icon to="/" icon="home" />
+              <Icon to="/shop" icon="bag" />
+              <Icon to="/cart" icon="cart" />
+            </div>
+          )}
+
+          {/* USER AREA */}
           {!user ? (
-            <Link
-              to="/login"
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "12px 32px",
-                borderRadius: "50px",
-                color: "white",
-                textDecoration: "none",
-                letterSpacing: "1px",
-              }}
-            >
+            <Link to="/login" className="nav-login-btn">
               ĐĂNG NHẬP
             </Link>
           ) : (
             <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "14px",
-                cursor: "pointer",
-              }}
-              onClick={() => setOpen(!open)}
+              className="nav-user"
+              onClick={() => setOpen((v) => !v)}
             >
-              <div
-                style={{
-                  width: "48px",
-                  height: "48px",
-                  borderRadius: "50%",
-                  overflow: "hidden",
-                  background: "rgba(255,255,255,0.25)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "20px",
-                  fontWeight: "bold",
-                }}
-              >
+              <div className="nav-avatar">
                 {profile?.avatar_url ? (
                   <img
                     src={profile.avatar_url}
@@ -127,12 +151,11 @@ export default function Navbar({ user, profile, isAdmin }) {
                   firstLetter
                 )}
               </div>
-
               <div>
-                <div style={{ fontWeight: 600 }}>
-                  {isAdmin ? "ADMIN" : profile?.full_name}
+                <div className="nav-user-name">
+                  {isAdmin ? "ADMIN" : profile?.full_name || user.email}
                 </div>
-                <div style={{ fontSize: "11px", opacity: 0.7 }}>
+                <div className="nav-user-sub">
                   {open ? "▲" : "▼"} TÀI KHOẢN
                 </div>
               </div>
@@ -141,18 +164,7 @@ export default function Navbar({ user, profile, isAdmin }) {
 
           {/* DROPDOWN */}
           {open && user && (
-            <div
-              style={{
-                position: "absolute",
-                right: 0,
-                top: "70px",
-                width: isAdmin ? "260px" : "230px",
-                background: "white",
-                borderRadius: "14px",
-                overflow: "hidden",
-                boxShadow: "0 15px 30px rgba(0,0,0,0.25)",
-              }}
-            >
+            <div className="nav-dropdown">
               {isAdmin ? (
                 <>
                   <DropLink to="/admin">Trang quản trị</DropLink>
@@ -173,12 +185,13 @@ export default function Navbar({ user, profile, isAdmin }) {
                 onClick={handleLogout}
                 style={{
                   width: "100%",
-                  padding: "14px 18px",
-                  background: "#A51C30",
+                  padding: "16px 20px",
+                  background: "#a21e32ff",
                   color: "white",
                   border: "none",
                   textAlign: "left",
                   fontWeight: "600",
+                  cursor: "pointer",
                 }}
               >
                 Đăng xuất
@@ -186,8 +199,296 @@ export default function Navbar({ user, profile, isAdmin }) {
             </div>
           )}
         </div>
+
+        {/* MOBILE RIGHT: cart + avatar + hamburger */}
+        <div className="nav-right nav-right-mobile">
+          {!isAdmin && (
+            <Icon to="/cart" icon="cart" />
+          )}
+
+          {user && (
+            <div
+              className="nav-avatar nav-avatar-mobile"
+              onClick={() => setOpen((v) => !v)}
+            >
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt="avatar"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                firstLetter
+              )}
+            </div>
+          )}
+
+          {!user && (
+            <Link to="/login" className="nav-login-btn nav-login-mobile">
+              ĐN
+            </Link>
+          )}
+
+          <button
+            className="nav-burger"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
       </nav>
+
+      {/* MOBILE MENU OVERLAY */}
+      {mobileMenuOpen && (
+        <div className="nav-mobile-menu">
+          <div className="nav-mobile-inner">
+            {isAdmin ? (
+              <>
+                <DropLink to="/admin">Dashboard</DropLink>
+                <DropLink to="/admin/products">Sản phẩm</DropLink>
+                <DropLink to="/admin/orders">Đơn hàng</DropLink>
+                <DropLink to="/admin/users">Người dùng</DropLink>
+                <DropLink to="/shop">Xem shop</DropLink>
+              </>
+            ) : (
+              <>
+                <DropLink to="/">Trang chủ</DropLink>
+                <DropLink to="/shop">Shop</DropLink>
+                <DropLink to="/men">Men</DropLink>
+                <DropLink to="/women">Women</DropLink>
+                <DropLink to="/handcrafted">Diamond</DropLink>
+              </>
+            )}
+
+            {user && (
+              <button onClick={handleLogout} className="nav-logout-btn mobile">
+                Đăng xuất
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CSS */}
+      <style jsx>{`
+        .nav-root {
+          background: linear-gradient(135deg, #a51c30 0%, #c51c35 100%);
+          padding: 1.1rem 0;
+          color: white;
+          position: fixed;
+          width: 100%;
+          top: 0;
+          z-index: 999;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+        .nav-inner {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 0 5vw;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .nav-logo {
+          font-size: 34px;
+          color: white;
+          text-decoration: none;
+          letter-spacing: 12px;
+          font-weight: 300;
+          font-family: "Playfair Display", serif;
+          display: flex;
+          align-items: baseline;
+          gap: 10px;
+        }
+        .nav-logo-admin {
+          font-size: 12px;
+          letter-spacing: 6px;
+          text-transform: uppercase;
+        }
+        .nav-center {
+          display: flex;
+          gap: 26px;
+          align-items: center;
+        }
+        .nav-right {
+          display: flex;
+          align-items: center;
+          gap: 18px;
+        }
+        .nav-icons {
+          display: flex;
+          gap: 18px;
+          margin-right: 12px;
+        }
+        .nav-login-btn {
+          background: rgba(255, 255, 255, 0.2);
+          padding: 10px 26px;
+          border-radius: 50px;
+          color: white;
+          text-decoration: none;
+          letter-spacing: 1px;
+          font-size: 13px;
+          font-weight: 600;
+          border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .nav-user {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          cursor: pointer;
+        }
+        .nav-avatar {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          overflow: hidden;
+          background: rgba(255, 255, 255, 0.25);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          font-weight: bold;
+        }
+        .nav-user-name {
+          font-weight: 600;
+          font-size: 13px;
+        }
+        .nav-user-sub {
+          font-size: 11px;
+          opacity: 0.7;
+        }
+        .nav-dropdown {
+          position: absolute;
+          right: 0;
+          top: 70px;
+          width: 240px;
+          background: white;
+          border-radius: 14px;
+          overflow: hidden;
+          box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25);
+          color: #333;
+        }
+        .nav-logout-btn {
+          width: 100%;
+          padding: 14px 18px;
+          background: #a51c30;
+          color: white;
+          border: none;
+          text-align: left;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .nav-logout-btn.mobile {
+          text-align: center;
+          border-radius: 0 0 14px 14px;
+        }
+
+        /* Mobile */
+        .nav-center-desktop {
+          display: flex;
+        }
+        .nav-right-desktop {
+          display: flex;
+        }
+        .nav-right-mobile {
+          display: none;
+        }
+
+        .nav-burger {
+          display: none;
+          width: 40px;
+          height: 32px;
+          border-radius: 10px;
+          border: 1px solid rgba(255, 255, 255, 0.6);
+          background: transparent;
+          display: none;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          gap: 5px;
+          padding: 0;
+        }
+        .nav-burger span {
+          width: 18px;
+          height: 2px;
+          background: white;
+        }
+
+        .nav-mobile-menu {
+          position: fixed;
+          inset: 70px 0 0 0;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(12px);
+          z-index: 998;
+        }
+        .nav-mobile-inner {
+          max-width: 360px;
+          margin-left: auto;
+          background: #111;
+          height: 100%;
+          padding-top: 16px;
+        }
+
+        @media (max-width: 1024px) {
+          .nav-logo {
+            font-size: 26px;
+            letter-spacing: 8px;
+          }
+          .nav-center-desktop {
+            display: none;
+          }
+          .nav-right-desktop {
+            display: none;
+          }
+          .nav-right-mobile {
+            display: flex;
+          }
+          .nav-burger {
+            display: flex;
+          }
+          .nav-avatar-mobile {
+            width: 36px;
+            height: 36px;
+          }
+          .nav-login-mobile {
+            padding: 8px 16px;
+            font-size: 11px;
+          }
+        }
+
+        @media (max-width: 600px) {
+          .nav-inner {
+            padding: 0 16px;
+          }
+          .nav-logo {
+            font-size: 22px;
+            letter-spacing: 6px;
+          }
+        }
+      `}</style>
     </header>
+  );
+}
+
+/* TOP LINK */
+function TopLink({ to, children, active }) {
+  return (
+    <Link
+      to={to}
+      style={{
+        fontSize: 14,
+        textDecoration: "none",
+        textTransform: "uppercase",
+        letterSpacing: "3px",
+        color: active ? "#fff" : "rgba(255,255,255,0.8)",
+        borderBottom: active ? "2px solid rgba(255,255,255,0.9)" : "2px solid transparent",
+        paddingBottom: 4,
+      }}
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -213,7 +514,7 @@ function Icon({ to, icon }) {
 
   return (
     <Link to={to} style={{ color: "white" }}>
-      <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2.2">
+      <svg width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2.2">
         {icons[icon]}
       </svg>
     </Link>

@@ -168,7 +168,7 @@ export default function NavbarAdmin({ profile: initialProfile }) {
                 style={{
                   width: "100%",
                   padding: "16px 20px",
-                  background: "#A51C30",
+                  background: "#b82239ff",
                   color: "white",
                   border: "none",
                   textAlign: "left",

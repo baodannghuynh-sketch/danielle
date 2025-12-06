@@ -39,14 +39,19 @@ export const useCartStore = create((set, get) => ({
     if (idx >= 0) {
       items[idx].quantity += 1;
     } else {
-      items.push({ ...product, quantity: 1 });
+      items.push({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image_url: product.image_url || product.image,
+        quantity: 1,
+      });
     }
 
     set({ items });
     get().persist();
   },
 
-  // Cart.jsx đang dùng updateQuantity(id, newQty)
   updateQuantity: (id, quantity) => {
     let items = [...get().items];
 
@@ -54,7 +59,7 @@ export const useCartStore = create((set, get) => ({
       items = items.filter((i) => i.id !== id);
     } else {
       items = items.map((i) =>
-        i.id === id ? { ...i, quantity } : i
+        i.id === id ? { ...i, quantity: quantity } : i
       );
     }
 
@@ -85,13 +90,15 @@ export const useCartStore = create((set, get) => ({
     get().persist();
   },
 
+  clear: () => {
+    set({ items: [] });
+    get().persist();
+  },
+
   getCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
 
   totalPrice: () =>
-    get().items.reduce(
-      (sum, i) => sum + i.price * i.quantity,
-      0
-    ),
+    get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
 
   // ---------------- WISHLIST ----------------
   toggleWishlist: (p) => {
@@ -101,7 +108,12 @@ export const useCartStore = create((set, get) => ({
     if (exists) {
       w = w.filter((i) => i.id !== p.id);
     } else {
-      w.push(p);
+      w.push({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        image_url: p.image_url || p.image,
+      });
     }
 
     set({ wishlist: w });
@@ -112,9 +124,14 @@ export const useCartStore = create((set, get) => ({
   addRecentViewed: (p) => {
     let r = [...get().recentViewed];
 
-    r = r.filter((i) => i.id !== p.id); // xoá nếu đã tồn tại
-    r.unshift(p); // thêm đầu
-    if (r.length > 10) r.pop(); // giữ 10 sản phẩm
+    // xóa nếu đã tồn tại
+    r = r.filter((i) => i.id !== p.id);
+
+    // thêm vào đầu danh sách
+    r.unshift(p);
+
+    // chỉ giữ 10 sản phẩm gần nhất
+    if (r.length > 10) r.pop();
 
     set({ recentViewed: r });
     get().persist();
